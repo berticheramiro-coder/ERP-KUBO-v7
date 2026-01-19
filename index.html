@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión 3D Pro + Stock</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f1f5f9; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .ticket-cliente {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-top: 8px solid #1e3a8a;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+        }
+        .kpi-card { background: white; padding: 12px; border: 1px solid #e5e7eb; border-radius: 12px; }
+        /* Estilos Stock */
+        .img-stock { width: 100%; height: 120px; object-fit: cover; border-radius: 8px; background: #e2e8f0; }
+        .editable-name { border-bottom: 1px dashed #cbd5e1; cursor: pointer; }
+        .editable-name:focus { outline: none; border-bottom: 1px solid #1e3a8a; background: #f8fafc; }
+    </style>
+</head>
+<body class="pb-20">
+
+    <nav class="bg-blue-900 text-white p-4 sticky top-0 z-50 shadow-lg">
+        <div class="container mx-auto flex justify-between items-center px-2">
+            <h1 class="text-xl font-bold"><i class="fas fa-microchip"></i> Gestión 3D</h1>
+            <button onclick="exportarExcel()" class="bg-green-600 hover:bg-green-700 text-white text-xs py-1 px-3 rounded flex items-center gap-2">
+                <i class="fas fa-file-excel"></i> Exportar
+            </button>
+        </div>
+        <div class="container mx-auto flex justify-around mt-4 text-[10px] md:text-xs font-bold uppercase tracking-wider">
+            <button onclick="switchTab('cotizador')" class="tab-btn pb-2 border-b-2 border-blue-400" id="btn-cotizador">Cotizar</button>
+            <button onclick="switchTab('libro')" class="tab-btn pb-2 border-b-2 border-transparent" id="btn-libro">Ventas</button>
+            <button onclick="switchTab('gastos')" class="tab-btn pb-2 border-b-2 border-transparent" id="btn-gastos">Insumos</button>
+            <button onclick="switchTab('resumen')" class="tab-btn pb-2 border-b-2 border-transparent" id="btn-resumen">Finanzas</button>
+            <button onclick="switchTab('stock')" class="tab-btn pb-2 border-b-2 border-transparent" id="btn-stock">Stock</button>
+        </div>
+    </nav>
+
+    <div class="container mx-auto p-4 max-w-5xl">
+
+        <div id="cotizador" class="tab-content active max-w-xl mx-auto">
+             <div class="bg-white p-6 rounded-xl shadow-sm mb-6 border border-gray-100">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="font-bold text-gray-800 uppercase text-sm tracking-widest">Calculadora Interna</h2>
+                    <div class="bg-red-50 text-red-700 px-3 py-1 rounded-full text-xs font-bold border border-red-100">Costo: <span id="costoRealRef">$0</span></div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="col-span-2"><label class="block text-xs font-bold text-gray-500 mb-1">Nombre del Trabajo</label><input type="text" id="nombreTrabajo" class="w-full border p-2 rounded bg-gray-50 focus:bg-white outline-blue-500" placeholder="Ej: Lámpara Saturno"></div>
+                    <div><label class="block text-xs font-bold text-gray-500 mb-1">Filamento (gr)</label><input type="number" id="filamento" class="w-full border p-2 rounded" placeholder="0" oninput="calcular()"></div>
+                    <div><label class="block text-xs font-bold text-gray-500 mb-1">Energía (horas)</label><input type="number" id="energia" class="w-full border p-2 rounded" placeholder="0" oninput="calcular()"></div>
+                    <div class="flex items-center gap-2 pt-2"><input type="checkbox" id="checkLlavero" class="w-5 h-5 rounded" onchange="toggleLlavero()"><label class="text-xs font-bold text-gray-700">¿Llavero?</label></div>
+                    <div id="boxLlavero" class="hidden"><label class="block text-xs font-bold text-gray-500 mb-1">Cant. Llaveros</label><input type="number" id="cantLlaveros" class="w-full border p-2 rounded" value="0" oninput="calcular()"></div>
+                    <div class="col-span-2"><label class="block text-xs font-bold text-gray-500 mb-1">Mano de Obra (horas)</label><input type="number" id="manoObra" class="w-full border p-2 rounded" placeholder="0" oninput="calcular()"></div>
+                </div>
+            </div>
+            <div class="ticket-cliente p-8 text-center" id="ticketVisual">
+                <div class="text-blue-900 font-black text-xs uppercase tracking-[0.3em] mb-4 italic">Presupuesto de Impresión 3D</div>
+                <h3 id="displayNombre" class="text-xl font-bold text-gray-800 mb-2">Proyecto Personalizado</h3>
+                <div class="h-1 w-12 bg-blue-900 mx-auto mb-6"></div>
+                <div class="text-5xl font-black text-gray-900 mb-2" id="precioFinalDisplay">$0</div>
+                <p class="text-gray-400 text-[10px] uppercase mb-6 tracking-widest">Impuestos y materiales incluidos</p>
+            </div>
+            <button onclick="abrirModalGuardar()" class="w-full mt-6 bg-blue-900 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-black transition-all flex items-center justify-center gap-3"><i class="fas fa-save"></i> REGISTRAR VENTA</button>
+        </div>
+
+        <div id="libro" class="tab-content max-w-xl mx-auto">
+            <div class="bg-white p-4 rounded-xl shadow-sm mb-4">
+                <h2 class="font-bold text-gray-700 mb-3">Carga Manual</h2>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <input type="text" id="ventaCliente" placeholder="Cliente" class="border p-2 rounded">
+                    <input type="date" id="ventaFecha" class="border p-2 rounded">
+                    <input type="number" id="ventaPrecio" placeholder="Precio Venta" class="border p-2 rounded">
+                    <input type="number" id="ventaCosto" placeholder="Costo Fabricación" class="border p-2 rounded">
+                    <select id="ventaCategoria" class="border p-2 rounded col-span-2"><option value="Lámparas">Lámparas</option><option value="Llaveros">Llaveros</option><option value="Impresión particular">Impresión particular</option></select>
+                    <button onclick="agregarVentaManual()" class="col-span-2 bg-blue-600 text-white py-2 rounded font-bold uppercase tracking-widest">Añadir al Libro</button>
+                </div>
+            </div>
+            <div id="listaVentasPorMes" class="space-y-4 text-sm"></div>
+        </div>
+
+        <div id="gastos" class="tab-content max-w-xl mx-auto">
+            <div class="bg-white p-4 rounded-xl shadow-sm mb-4 border-l-4 border-red-500">
+                <h2 class="font-bold text-gray-700 mb-2 italic">Compra de Insumos</h2>
+                <div class="space-y-2">
+                    <input type="text" id="gastoMotivo" placeholder="Ej: Bobina PLA" class="w-full border p-2 rounded text-sm">
+                    <div class="flex gap-2"><input type="number" id="gastoMonto" placeholder="Monto $" class="w-full border p-2 rounded text-sm"><input type="date" id="gastoFecha" class="border p-2 rounded text-sm"></div>
+                    <button onclick="agregarGasto()" class="w-full bg-red-500 text-white py-2 rounded-lg font-bold">REGISTRAR GASTO</button>
+                </div>
+            </div>
+            <div id="listaGastosItems" class="bg-white rounded-xl shadow-sm overflow-hidden divide-y"></div>
+        </div>
+
+        <div id="resumen" class="tab-content max-w-xl mx-auto">
+            <div class="bg-black text-white p-5 rounded-2xl shadow-xl mb-6 flex justify-between items-center">
+                <div><div class="text-[10px] uppercase tracking-widest text-gray-400">Balance Histórico</div><div id="balanceTotal" class="text-3xl font-black text-green-400">$0</div></div>
+                <i class="fas fa-vault text-4xl opacity-20"></i>
+            </div>
+            <div class="flex gap-2 mb-4 overflow-x-auto pb-2">
+                <input type="month" id="filtroMes" class="border p-2 rounded-lg text-sm bg-white" onchange="renderResumen()">
+                <select id="tipoGrafico" class="border p-2 rounded-lg text-sm bg-white" onchange="renderResumen()"><option value="torta">Ganancia x Categoría</option><option value="barras">Ingresos vs Costos</option></select>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-sm mb-6"><canvas id="canvasGrafico"></canvas></div>
+            <div class="grid grid-cols-2 gap-3 mb-6">
+                <div class="kpi-card"><div class="text-[9px] font-bold text-blue-500 uppercase">Ventas Totales</div><div id="kpiVentas" class="text-lg font-black text-gray-800">$0</div></div>
+                <div class="kpi-card"><div class="text-[9px] font-bold text-green-500 uppercase">Rentabilidad s/Vta</div><div id="kpiRentabilidad" class="text-lg font-black text-gray-800">0%</div></div>
+                <div class="kpi-card"><div class="text-[9px] font-bold text-purple-500 uppercase">Ticket Promedio</div><div id="kpiTicket" class="text-lg font-black text-gray-800">$0</div></div>
+                <div class="kpi-card"><div class="text-[9px] font-bold text-orange-500 uppercase">Ganancia Promedio</div><div id="kpiGananciaProm" class="text-lg font-black text-gray-800">$0</div></div>
+            </div>
+        </div>
+
+        <div id="stock" class="tab-content">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                
+                <section>
+                    <div class="flex items-center gap-3 mb-6">
+                        <i class="fas fa-lightbulb text-yellow-500 text-2xl"></i>
+                        <h2 class="text-xl font-black uppercase tracking-tighter text-gray-800">Modelos de Lámparas</h2>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" id="contenedorLamparas">
+                        </div>
+                </section>
+
+                <section>
+                    <div class="flex items-center gap-3 mb-6">
+                        <i class="fas fa-layer-group text-blue-500 text-2xl"></i>
+                        <h2 class="text-xl font-black uppercase tracking-tighter text-gray-800">Bases de Lámparas</h2>
+                    </div>
+                    <div class="space-y-4" id="contenedorBases">
+                        </div>
+                </section>
+
+            </div>
+        </div>
+
+    </div>
+
+    <div id="modalGuardar" class="fixed inset-0 bg-black/60 hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white p-6 rounded-2xl w-full max-w-sm">
+            <h3 class="font-bold text-lg mb-4 text-blue-900">Finalizar Venta</h3>
+            <input type="text" id="modalCliente" placeholder="Nombre del Cliente" class="w-full border p-3 rounded-xl mb-2">
+            <select id="modalCategoria" class="w-full border p-3 rounded-xl mb-4">
+                <option value="Lámparas">Lámparas</option>
+                <option value="Llaveros">Llaveros</option>
+                <option value="Impresión particular">Impresión particular</option>
+            </select>
+            <div class="flex gap-2 font-bold"><button onclick="cerrarModal()" class="flex-1 bg-gray-100 py-3 rounded-xl">VOLVER</button><button onclick="guardarDesdeCotizador()" class="flex-1 bg-blue-900 text-white py-3 rounded-xl">CONFIRMAR</button></div>
+        </div>
+    </div>
+
+    <script>
+        // --- LOGICA EXISTENTE ---
+        let ventas = JSON.parse(localStorage.getItem('ventas_3d_v3')) || [];
+        let gastos = JSON.parse(localStorage.getItem('gastos_3d_v3')) || [];
+        let tempPrecio = 0, tempCosto = 0, miChart = null;
+        const config = { fil: 20, ene: 100, lla: 200, man: 10000 };
+
+        function switchTab(id) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('border-blue-400'));
+            document.getElementById(id).classList.add('active');
+            document.getElementById('btn-' + id).classList.add('border-blue-400');
+            if(id === 'libro') renderLibro();
+            if(id === 'gastos') renderGastos();
+            if(id === 'resumen') renderResumen();
+            if(id === 'stock') renderStock();
+        }
+
+        // ... (Funciones de calcular, toggleLlavero, guardarDesdeCotizador, etc. se mantienen igual)
+        function toggleLlavero() { document.getElementById('boxLlavero').classList.toggle('hidden', !document.getElementById('checkLlavero').checked); calcular(); }
+        function calcular() {
+            const f = parseFloat(document.getElementById('filamento').value) || 0;
+            const e = parseFloat(document.getElementById('energia').value) || 0;
+            const l = parseFloat(document.getElementById('cantLlaveros').value) || 0;
+            const m = parseFloat(document.getElementById('manoObra').value) || 0;
+            tempCosto = (f * config.fil) + (e * config.ene) + (l * config.lla) + (m * config.man);
+            tempPrecio = Math.round(((f * config.fil + e * config.ene) * 3.5) + (l * config.lla + m * config.man));
+            document.getElementById('costoRealRef').innerText = `$${tempCosto.toLocaleString()}`;
+            document.getElementById('precioFinalDisplay').innerText = `$${tempPrecio.toLocaleString()}`;
+            document.getElementById('displayNombre').innerText = document.getElementById('nombreTrabajo').value || "Proyecto Personalizado";
+        }
+        function abrirModalGuardar() { if(tempPrecio === 0) return alert("Cotiza algo primero"); document.getElementById('modalGuardar').classList.remove('hidden'); }
+        function cerrarModal() { document.getElementById('modalGuardar').classList.add('hidden'); }
+        function guardarDesdeCotizador() {
+            const item = { id: Date.now(), fecha: new Date().toISOString().split('T')[0], cliente: document.getElementById('modalCliente').value || "S/N", trabajo: document.getElementById('nombreTrabajo').value || "Impresión 3D", precio: tempPrecio, costo: tempCosto, categoria: document.getElementById('modalCategoria').value };
+            ventas.push(item); save(); cerrarModal(); alert("Venta registrada");
+        }
+        function agregarVentaManual() {
+            const v = { id: Date.now(), fecha: document.getElementById('ventaFecha').value || new Date().toISOString().split('T')[0], cliente: document.getElementById('ventaCliente').value || "Manual", trabajo: "Carga manual", precio: parseFloat(document.getElementById('ventaPrecio').value) || 0, costo: parseFloat(document.getElementById('ventaCosto').value) || 0, categoria: document.getElementById('ventaCategoria').value };
+            ventas.push(v); save(); renderLibro();
+        }
+        function agregarGasto() {
+            const g = { id: Date.now(), fecha: document.getElementById('gastoFecha').value || new Date().toISOString().split('T')[0], motivo: document.getElementById('gastoMotivo').value || "Insumo", monto: parseFloat(document.getElementById('gastoMonto').value) || 0 };
+            gastos.push(g); save(); renderGastos();
+        }
+        function renderLibro() {
+            const container = document.getElementById('listaVentasPorMes'); container.innerHTML = '';
+            const grupos = ventas.reduce((acc, v) => { const mes = v.fecha.substring(0, 7); if(!acc[mes]) acc[mes] = []; acc[mes].push(v); return acc; }, {});
+            Object.keys(grupos).sort().reverse().forEach(mes => {
+                let html = `<div class="bg-white rounded-xl shadow-sm overflow-hidden mb-6"><div class="bg-gray-800 text-white px-4 py-2 text-xs font-bold uppercase tracking-widest">${mes}</div><table class="w-full text-left"><tbody class="divide-y divide-gray-100">`;
+                grupos[mes].forEach(v => { html += `<tr class="p-3"><td class="p-3"><div class="font-bold">${v.cliente}</div><div class="text-[10px] text-gray-400">${v.trabajo}</div></td><td class="p-3 text-right"><div class="text-blue-600 font-bold">$${v.precio.toLocaleString()}</div><div class="text-[10px] text-green-500">+$${(v.precio - v.costo).toLocaleString()}</div></td><td class="p-3 text-center"><button onclick="borrarVenta(${v.id})" class="text-gray-300 hover:text-red-500"><i class="fas fa-times"></i></button></td></tr>`; });
+                container.innerHTML += html + `</tbody></table></div>`;
+            });
+        }
+        function renderGastos() {
+            const div = document.getElementById('listaGastosItems'); div.innerHTML = '';
+            gastos.slice().reverse().forEach(g => { div.innerHTML += `<div class="p-4 flex justify-between items-center bg-white"><div><div class="font-bold text-gray-700">${g.motivo}</div><div class="text-[10px] text-gray-400">${g.fecha}</div></div><div class="flex items-center gap-4"><span class="text-red-500 font-bold">-$${g.monto.toLocaleString()}</span><button onclick="borrarGasto(${g.id})" class="text-gray-200 hover:text-red-500"><i class="fas fa-trash"></i></button></div></div>`; });
+        }
+        function renderResumen() {
+            const mesSel = document.getElementById('filtroMes').value || new Date().toISOString().substring(0,7);
+            const vMes = ventas.filter(v => v.fecha.startsWith(mesSel));
+            const gMes = gastos.filter(g => g.fecha.startsWith(mesSel));
+            const tVentas = vMes.reduce((s,v) => s + v.precio, 0);
+            const tEgresos = vMes.reduce((s,v) => s + v.costo, 0) + gMes.reduce((s,g) => s + g.monto, 0);
+            const tGanancia = tVentas - tEgresos;
+            document.getElementById('kpiVentas').innerText = `$${tVentas.toLocaleString()}`;
+            document.getElementById('kpiRentabilidad').innerText = tVentas > 0 ? Math.round((tGanancia / tVentas) * 100) + "%" : "0%";
+            document.getElementById('kpiTicket').innerText = vMes.length > 0 ? `$${Math.round(tVentas / vMes.length).toLocaleString()}` : "$0";
+            document.getElementById('kpiGananciaProm').innerText = vMes.length > 0 ? `$${Math.round(tGanancia / vMes.length).toLocaleString()}` : "$0";
+            const globalV = ventas.reduce((s,v) => s + v.precio, 0);
+            const globalE = gastos.reduce((s,g) => s + g.monto, 0) + ventas.reduce((s,v) => s + v.costo, 0);
+            document.getElementById('balanceTotal').innerText = `$${(globalV - globalE).toLocaleString()}`;
+            const ctx = document.getElementById('canvasGrafico').getContext('2d');
+            if(miChart) miChart.destroy();
+            if(document.getElementById('tipoGrafico').value === 'torta') {
+                const cats = vMes.reduce((acc, v) => { acc[v.categoria] = (acc[v.categoria] || 0) + (v.precio - v.costo); return acc; }, {});
+                miChart = new Chart(ctx, { type: 'doughnut', data: { labels: Object.keys(cats), datasets: [{ data: Object.values(cats), backgroundColor: ['#1e3a8a', '#10b981', '#f59e0b'] }] }, options: { plugins: { legend: { position: 'bottom' }}}});
+            } else {
+                miChart = new Chart(ctx, { type: 'bar', data: { labels: ['Ventas', 'Egresos'], datasets: [{ label: 'Mes actual', data: [tVentas, tEgresos], backgroundColor: ['#1e3a8a', '#ef4444'] }] }});
+            }
+        }
+        function save() { localStorage.setItem('ventas_3d_v3', JSON.stringify(ventas)); localStorage.setItem('gastos_3d_v3', JSON.stringify(gastos)); }
+        function borrarVenta(id) { if(confirm('¿Borrar?')) { ventas = ventas.filter(v => v.id !== id); save(); renderLibro(); } }
+        function borrarGasto(id) { if(confirm('¿Borrar?')) { gastos = gastos.filter(g => g.id !== id); save(); renderGastos(); } }
+        function exportarExcel() {
+            const data = ventas.map(v => ({ Fecha: v.fecha, Cliente: v.cliente, Detalle: v.trabajo, Categoria: v.categoria, Ingreso: v.precio, Costo_Fabricacion: v.costo, Ganancia: v.precio - v.costo }));
+            const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Ventas"); XLSX.writeFile(wb, "Gestion_3D_Backup.xlsx");
+        }
+
+        // --- NUEVA LÓGICA STOCK ---
+
+        // Inicialización de datos de Stock
+        let stockLamparas = JSON.parse(localStorage.getItem('stock_lamparas_3d')) || Array(6).fill().map((_, i) => ({ id: i, nombre: `Lámpara ${i+1}`, stock: 0, img: '' }));
+        let stockBases = JSON.parse(localStorage.getItem('stock_bases_3d')) || Array(5).fill().map((_, i) => ({ 
+            id: i, 
+            nombre: `Base Tipo ${i+1}`, 
+            img: '',
+            maderas: [
+                { nombre: 'Madera A', stock: 0 },
+                { nombre: 'Madera B', stock: 0 },
+                { nombre: 'Madera C', stock: 0 }
+            ]
+        }));
+
+        function saveStock() {
+            localStorage.setItem('stock_lamparas_3d', JSON.stringify(stockLamparas));
+            localStorage.setItem('stock_bases_3d', JSON.stringify(stockBases));
+        }
+
+        function renderStock() {
+            // Render Lámparas
+            const contLamparas = document.getElementById('contenedorLamparas');
+            contLamparas.innerHTML = '';
+            stockLamparas.forEach(item => {
+                const card = document.createElement('div');
+                card.className = "bg-white p-4 rounded-xl shadow-sm border border-gray-100";
+                card.innerHTML = `
+                    <div class="relative group mb-3">
+                        <img src="${item.img || 'https://via.placeholder.com/150?text=Subir+Foto'}" class="img-stock cursor-pointer" onclick="document.getElementById('file-lampara-${item.id}').click()">
+                        <input type="file" id="file-lampara-${item.id}" class="hidden" accept="image/*" onchange="subirImagen(event, 'lampara', ${item.id})">
+                    </div>
+                    <div contenteditable="true" class="font-bold text-gray-800 mb-3 editable-name text-center" onblur="editarNombreStock(event, 'lampara', ${item.id})">${item.nombre}</div>
+                    <div class="flex items-center justify-between bg-gray-50 p-2 rounded-lg">
+                        <button onclick="cambiarStock('lampara', ${item.id}, -1)" class="w-8 h-8 flex items-center justify-center bg-white border rounded shadow-sm text-red-500 font-bold">-</button>
+                        <span class="text-lg font-black text-blue-900">${item.stock}</span>
+                        <button onclick="cambiarStock('lampara', ${item.id}, 1)" class="w-8 h-8 flex items-center justify-center bg-white border rounded shadow-sm text-green-500 font-bold">+</button>
+                    </div>
+                `;
+                contLamparas.appendChild(card);
+            });
+
+            // Render Bases
+            const contBases = document.getElementById('contenedorBases');
+            contBases.innerHTML = '';
+            stockBases.forEach(base => {
+                const card = document.createElement('div');
+                card.className = "bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4";
+                
+                let maderasHtml = '';
+                base.maderas.forEach((m, mIdx) => {
+                    maderasHtml += `
+                        <div class="flex-1 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                            <div contenteditable="true" class="text-[10px] uppercase font-black text-gray-500 mb-2 editable-name" onblur="editarNombreMadera(event, ${base.id}, ${mIdx})">${m.nombre}</div>
+                            <div class="flex items-center justify-between">
+                                <button onclick="cambiarStock('base', ${base.id}, -1, ${mIdx})" class="w-7 h-7 bg-white border rounded text-red-500 font-bold text-sm">-</button>
+                                <span class="font-bold text-gray-800">${m.stock}</span>
+                                <button onclick="cambiarStock('base', ${base.id}, 1, ${mIdx})" class="w-7 h-7 bg-white border rounded text-green-500 font-bold text-sm">+</button>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                card.innerHTML = `
+                    <div class="w-full md:w-32 h-32 flex-shrink-0">
+                        <img src="${base.img || 'https://via.placeholder.com/150?text=Foto'}" class="w-full h-full object-cover rounded-lg bg-gray-100 cursor-pointer" onclick="document.getElementById('file-base-${base.id}').click()">
+                        <input type="file" id="file-base-${base.id}" class="hidden" accept="image/*" onchange="subirImagen(event, 'base', ${base.id})">
+                    </div>
+                    <div class="flex-grow">
+                        <div contenteditable="true" class="font-black text-blue-900 mb-3 editable-name uppercase tracking-tighter" onblur="editarNombreStock(event, 'base', ${base.id})">${base.nombre}</div>
+                        <div class="flex flex-col sm:flex-row gap-2">${maderasHtml}</div>
+                    </div>
+                `;
+                contBases.appendChild(card);
+            });
+        }
+
+        function cambiarStock(tipo, id, delta, maderaIdx = null) {
+            if (tipo === 'lampara') {
+                stockLamparas[id].stock = Math.max(0, stockLamparas[id].stock + delta);
+            } else {
+                stockBases[id].maderas[maderaIdx].stock = Math.max(0, stockBases[id].maderas[maderaIdx].stock + delta);
+            }
+            saveStock();
+            renderStock();
+        }
+
+        function editarNombreStock(e, tipo, id) {
+            const nuevoNombre = e.target.innerText;
+            if (tipo === 'lampara') stockLamparas[id].nombre = nuevoNombre;
+            else stockBases[id].nombre = nuevoNombre;
+            saveStock();
+        }
+
+        function editarNombreMadera(e, baseId, mIdx) {
+            stockBases[baseId].maderas[mIdx].nombre = e.target.innerText;
+            saveStock();
+        }
+
+        function subirImagen(e, tipo, id) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                if (tipo === 'lampara') stockLamparas[id].img = event.target.result;
+                else stockBases[id].img = event.target.result;
+                saveStock();
+                renderStock();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Inits
+        document.getElementById('filtroMes').value = new Date().toISOString().substring(0,7);
+        document.getElementById('ventaFecha').valueAsDate = new Date();
+        document.getElementById('gastoFecha').valueAsDate = new Date();
+        // Carga inicial
+        renderLibro();
+        renderGastos();
+        renderResumen();
+    </script>
+</body>
+</html>
